@@ -1,0 +1,124 @@
+---
+title: "Practical Machine Learning Assignment"
+author: "Inder Chettri"
+output: html_document
+---
+
+#Synopsis
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+The data for this assignment has been obtained from 
+ - Training: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+ - Test: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+This has been downloaded to ./MachineLearning folder on local machine.
+
+#Exploring the data
+
+Loading required libraries
+
+```{r}
+library(caret)
+set.seed(12345)
+```
+
+We will load the files into memory removing NA values. 
+
+```{r}
+#setwd("./machine_learning")
+Trn <- read.csv("./MachineLearning/pml-training.csv", header=T, na.strings=c("NA", "#DIV/0!"))
+Test <- read.csv("./MachineLearning/pml-testing.csv", header=T, na.string=c("NA", "#DIV/0!"))
+```
+
+Evaluating the training set, we see a number of columns with NA values.
+
+```{r}
+dim(Trn)
+str(Trn)
+```
+
+#Data Preprocessing
+
+
+There are a number of columns with NA values. These have to be removed. Also removing the first 7 columns as they do not contribute to predicting the outcome. Carrying out the same operations on the test set. 
+
+```{r}
+RemCol <- which(colSums(is.na(Trn))!=0)
+Trn <- Trn[, -RemCol]
+Trn <- Trn[,-(1:7)]
+Test <- Test[, -RemCol]
+Test <- Test[,-(1:7)]
+dim(Trn)
+```
+
+Our new Training dataset now has 53 columns.
+
+We will partition this data to create a new training and test sets.
+
+```{r}
+NT <- createDataPartition(y=Trn$classe, p=0.75,list=FALSE)
+NTrn <- Trn[NT,] 
+NTst <- Trn[-NT,] 
+dim(NTrn)
+dim(NTst)
+```
+#Training the Model
+
+We will use 2 methods to to train the model
+
+##Boosting with trees using PCA for preprocessing  
+
+```{r, cache=TRUE}
+model1 <- train(classe~., data=NTrn, method='gbm', preProcess='pca', verbose = FALSE)
+```
+
+Predicting the outcome for the partitioned test set.
+
+```{r}
+print(model1, digits = 3)
+pr1 <- predict(model1, newdata = NTst)
+confusionMatrix(pr1,NTst$classe)
+```
+
+##Ramdom forest 
+
+```{r, cache=TRUE}
+FCtl <- trainControl(method="cv", number=5, allowParallel=TRUE, verbose=FALSE)
+model2<-train(classe~.,data=NTrn, method="rf", trControl=FCtl, verbose=FALSE)
+```
+
+
+```{r}
+print(model2, digits = 3)
+pr2 <- predict(model2,newdata = NTst)
+confusionMatrix(pr2,NTst$classe)
+```
+
+
+##Out of sample error
+
+Boosting with trees gives us an out of sample accuracy of 81.75% and random forest gives us out of sample accuracy of 99.39%. Therefore the out of sample error for boosting was 18.25% and for random forest was 0.61%
+
+We will go with random forest to predict values in the test set.
+
+#Applying selected model to the provided test set
+
+Prediction with the provided test set yields the following result.
+```{r}
+prT <- predict(model2,newdata = Test[,-53])
+prT
+```
+
+
+#Writing out the output
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("./MachineLearning/problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(prT)
+```
